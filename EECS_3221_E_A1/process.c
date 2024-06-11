@@ -31,12 +31,22 @@ typedef struct process {
     int dif;    //DIF = Max - Min
 }Process;
 
+typedef struct HashtableNode {
+    char value[50]; //Name of the dataset
+    int key;        //PID
+}Hashtable;
+
 int main(int argc, char* argv[]) {
 
     FILE* dataset;
+    int* child_pid;
+    char child_name[50];
 
     //Allocate heap memory for a process struct (each child process can manipulate their own copy of this struct)
     Process *p = malloc(sizeof(Process));
+
+    //Create an array of Hashtable Node elements to store PID as the key and dataset name as the value
+    Hashtable *hash[] = malloc(sizeof(Hashtable) * (argc - 1));
 
     /*
     Create n processes for n datasets using argc and argv
@@ -45,12 +55,21 @@ int main(int argc, char* argv[]) {
      - argv is a "string" (char[]) array of each element in the CLI
     */
     for (int i = 1; i < argc; i++) {
+        //Create a pipe before the fork so it is accessible to the child
         //Fork() a process
         //p->pid = fork()
 
         if (p->pid == 0){
             *p->name = argv[i];
+            //Free hashtable memory for the copy of the child process
+            free(hash);
             break;
+        }
+
+        else {
+            //Add child PID to a Hashtable to track the list of processes
+            hash[i]->key = p->pid;
+            *hash[i]->value = argv[i];
         }
     }
 
@@ -62,14 +81,30 @@ int main(int argc, char* argv[]) {
 
         //For loop to parse data
 
+        //Write only sum and dif to buffer
+
+        //Free memory
+        free(p);
         //exit()
     }
 
     //If parent process
     else {
-        for (int i = 0; i < argc - 1; i++) {
-            //wait()
+        //Get actual PID of the parent process (not necessary, just for accuracy)
+        p->pid = getpid();
 
+        for (int i = 0; i < argc - 1; i++) {
+            //child_pid = wait()
+
+            //Find the dataset name based on the child PID returned (linear search algorithm)
+            for (int j = 0; j < argc - 1; j++) {
+                if (hash[j]->key == child_pid) {
+                    *child_name = hash[j]->value;
+                }
+            }
+            //Calculate max and min (use double precision)
+                //max = (sum + dif) / 2
+                //min = (sum - dif) / 2
             //Print: name SUM=sum DIF=dif MIN=min MAX=max
             //printf("%s SUM=%d DIF=%d MIN=%d MAX=%d", p->name, p->sum, p->dif, p->max);
             
@@ -79,14 +114,20 @@ int main(int argc, char* argv[]) {
 
             else {
                 //If child min < parent min | parent min = child min
+                //p->min = 
 
                 //If child max > parent max | parent max = child max
+                //p->max = 
             }
         }
     }
         //All children finished executing
             //Output MAXIMUM and MINIMUM
         printf("MINIMUM=%d MAXIMUM=%d", p->min, p->max);
+
+        //Free memory from the heap
+        free(hash);
+        free(p);
 
     return 0;
 }
