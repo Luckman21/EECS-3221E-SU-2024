@@ -20,6 +20,7 @@ YorkU email address: luq21@my.yorku.ca
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 typedef struct process {
     char name[50]; //Process name (name of the dataset it's assigned to)
