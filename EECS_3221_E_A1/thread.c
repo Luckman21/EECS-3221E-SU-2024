@@ -30,14 +30,22 @@ typedef struct thread {
     int max;    //Maximum value of the dataset
     int sum;    //SUM = Max + Min
     int dif;    //DIF = Max - Min
-}Thread;
+}ThreadObj;
+
+typedef struct HashtableNode {
+    char value[50]; //Name of the dataset
+    int key;        //PID
+}Hashtable;
 
 int main(int argc, char* argv[]) {
 
     FILE* dataset;
 
     //Allocate heap memory for a process struct (each child process can manipulate their own copy of this struct)
-    Thread *t = malloc(sizeof(Thread));
+    ThreadObj *t = malloc(sizeof(ThreadObj));
+
+    //Create an array of Hashtable Node elements to store PID as the key and dataset name as the value
+    Hashtable *hash[] = malloc(sizeof(Hashtable) * (argc - 1));
 
     /*
     Create n threads for n datasets using argc and argv
@@ -47,11 +55,19 @@ int main(int argc, char* argv[]) {
     */
     for (int i = 1; i < argc; i++) {
         //Create a thread
+
+        //Add TID to a Hashtable to track the list of threads
+        hash[i-1]->key = t->tid;
+        *hash[i-1]->value = argv[i];
     }
 
-    //If parent process
+    //Main thread of execution
     for (int i = 0; i < argc - 1; i++) {
-        //wait()
+        //Upon thread completion
+        
+        //Variables to track the current child process that has finished executing
+        int* child_tid;
+        char child_name[50];
 
         //Print: name SUM=sum DIF=dif MIN=min MAX=max
         //printf("%s SUM=%d DIF=%d MIN=%d MAX=%d", p->name, p->sum, p->dif, p->max);
