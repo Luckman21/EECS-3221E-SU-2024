@@ -10,7 +10,7 @@ YorkU email address: luq21@my.yorku.ca
 //Create n processes for n datasets
     //child process name = dataset file name
     //sum = min + max
-    //dif = max - min
+    //dif = min - max
 
 //Output for each process
     //child_name SUM DIF MIN MAX
@@ -34,8 +34,8 @@ typedef struct process {
     int pid;        //Process ID
     double min;     //Minimum value of the dataset
     double max;     //Maximum value of the dataset
-    double sum;     //SUM = Max + Min
-    double dif;     //DIF = Max - Min
+    double sum;     //SUM = Min + Max
+    double dif;     //DIF = Min - Max
     int pipe;       //Index of the pipe for this process
 }Process;
 
@@ -126,6 +126,13 @@ int main(int argc, char* argv[]) {
 
         fclose(dataset);    //Close file after using
 
+        //Calculate sum and dif
+        p->sum = p->min + p->max;
+        p->dif = p->min - p->max;
+
+        if (p->dif < 0)
+            p->dif *= (double)(-1);
+
         //Write only sum and dif to buffer
         write(fd[p->pipe][WRITE_END], &p->sum, sizeof(p->sum));
         write(fd[p->pipe][WRITE_END], &p->dif, sizeof(p->dif));
@@ -190,7 +197,7 @@ int main(int argc, char* argv[]) {
     }
     /*All children finished executing
         Output MAXIMUM and MINIMUM*/
-    printf("MINIMUM=%lf MAXIMUM=%lf", p->min, p->max);
+    printf("MINIMUM=%lf MAXIMUM=%lf\n", p->min, p->max);
 
     free(p);    //Free memory from the heap
 
