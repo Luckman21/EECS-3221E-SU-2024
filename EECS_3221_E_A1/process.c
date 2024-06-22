@@ -130,9 +130,6 @@ int main(int argc, char* argv[]) {
         p->sum = p->min + p->max;
         p->dif = p->min - p->max;
 
-        if (p->dif < 0)
-            p->dif *= (double)(-1);
-
         //Write only sum and dif to buffer
         write(fd[p->pipe][WRITE_END], &p->sum, sizeof(p->sum));
         write(fd[p->pipe][WRITE_END], &p->dif, sizeof(p->dif));
@@ -148,6 +145,7 @@ int main(int argc, char* argv[]) {
         //Track the current child process that has finished executing
         Process *child_p = malloc(sizeof(Process));
         int status;
+        double dif;
         
         p->pid = getpid();  //Get actual PID of the parent process (not necessary, just for accuracy)
 
@@ -170,8 +168,14 @@ int main(int argc, char* argv[]) {
             Print: name SUM=sum DIF=dif MIN=min MAX=max
             printf("%s SUM=%d DIF=%d MIN=%d MAX=%d", p->name, p->sum, p->dif, p->max);*/
 
-            child_p->max = ((child_p->sum + child_p->dif) / (double)(2));
-            child_p->min = ((child_p->sum - child_p->dif) / (double)(2));
+            //Make the difference positive for correct calculation
+            if (child_p->dif < 0)
+                dif = child_p->dif * ((double)(-1));
+            else
+                dif = child_p->dif;
+
+            child_p->max = ((child_p->sum + dif) / (double)(2));
+            child_p->min = ((child_p->sum - dif) / (double)(2));
             
             if (i == 0) {
                 //Set min and max values to the values from the first process to finish execution
