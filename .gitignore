@@ -1,2 +1,7 @@
 
 EECS_3221_E_A1/process.exe
+EECS_3221_E_A1/thread.exe
+EECS_3221_E_A1/sys/wait.h
+EECS_3221_E_A1/test.c
+.vscode/settings.json
+.vscode/tasks.json
