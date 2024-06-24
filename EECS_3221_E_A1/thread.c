@@ -20,27 +20,14 @@ YorkU email address: luq21@my.yorku.ca
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <sys/types.h>
-//#include <sys/wait.h>
 #include <pthread.h>
 
 typedef struct thread {
     char name[50];  //Thread name (name of the dataset it's assigned to)
-    int index;      //
+    int index;      //Tracks the index of the thread's memory struct in the t_mem array
     double sum;     //SUM = Min + Max
     double dif;     //DIF = Min - Max
 }Thread;
-
-/**
- * @brief Function that runs as a thread when called using pthread_create.  
- * It computes the sum and dif between the max and min values of the dataset.
- * 
- * @param param 
- * @param index The index assigned to this thread from the threads struct array.
- * @param t The thread struct array index passed as a pointer, so the thread can write to shared heap memory.
- * @return void* 
- */
 
 void *thread_function(void *param);
 
@@ -56,18 +43,19 @@ int main(int argc, char* argv[]) {
      - argv is a "string" (char[]) array of each element in the CLI
     */
     for (int i = 1; i < argc; i++) {
-        strcpy(t_mem[i-1].name, argv[i]);
-        t_mem[i-1].index = i-1;
-        pthread_create(&workers[i-1], NULL, thread_function, &t_mem[i-1]);
+        strcpy(t_mem[i-1].name, argv[i]);   //Make dataset name available to the thread
+        t_mem[i-1].index = i-1;             //Keep track of index in thread struct array for main thread to pull data when thread finishes execution
+        pthread_create(&workers[i-1], NULL, thread_function, &t_mem[i-1]);  //Create a thread of thread_function function, pass the struct memory to it to pass multiple pieces of data
         pthread_join(workers[i-1], NULL);
     }
 
-    double maxF, minF = 0;
+    double maxF = 0, minF = 0;  //Define total max and min values
 
+    //Loops through all thread data to print values
     for (int i = 0; i < argc - 1; i++) {
 
-        double max, min, sum, dif;
-        Thread *tx = malloc(sizeof(Thread));
+        double max, min, sum, dif;  //Instantiate max, min, sum and dif values for each dataset
+        Thread *tx = malloc(sizeof(Thread));    //Use a struct to copy struct data temporarily
         
         //Wait for a thread to finish execution
 
@@ -77,12 +65,17 @@ int main(int argc, char* argv[]) {
         Print: name SUM=sum DIF=dif MIN=min MAX=max
         printf("%s SUM=%d DIF=%d MIN=%d MAX=%d", p->name, p->sum, p->dif, p->max);*/
 
+        *tx = t_mem[i]; //Copy struct data of thread that finished for processing
+
         sum = tx->sum;
         dif = tx->dif;
 
-        max = ((sum + dif) / (double)(2));
-        min = ((sum - dif) / (double)(2));
-        
+        //Make the difference positive for correct calculation
+        if (dif < 0) {
+            max = ((sum + (dif * (double)(-1))) / (double)(2));
+            min = ((sum - (dif * (double)(-1))) / (double)(2));
+        }
+
         if (i == 0) {
             //Set min and max values to the values from the first process to finish execution
             minF = min;
@@ -90,37 +83,47 @@ int main(int argc, char* argv[]) {
         }
 
         else {
-            //If child min < parent min | parent min = child min
+            //If thread min < total min | total min = thread min
             if (min < minF)
                 minF = min;
 
-            //If child max > parent max | parent max = child max
+            //If thread max > total max | total max = thread max
             if (max > maxF)
                 maxF = max;
         }
 
-        //Print all the significant values for the child process
+        //Print all the significant values for the thread
         printf("%s SUM=%lf DIF=%lf MIN=%lf MAX=%lf\n", tx->name, sum, dif, min, max);
         
         free(tx);  //Free memory from the heap
     }
-    /*All children finished executing
+    /*All threads finished execution
         Output MAXIMUM and MINIMUM*/
     printf("MINIMUM=%lf MAXIMUM=%lf\n", minF, maxF);
 
     return 0;
 }
 
+/**
+ * @brief Function that runs as a thread when called using pthread_create and join.  
+ * It computes the sum and dif between the max and min values of the dataset.
+ * 
+ * @param param The parameter passed to the thread.  In this case, I pass a Thread struct I created to pass a set of data to the thread.
+ * @param index The index assigned to this thread from the threads struct array.
+ * @param t The thread struct array index passed as a pointer, so the thread can write to shared heap memory.
+ * @return void* 
+ */
 void *thread_function(void *param) {
 
+    //Init values like the file, min, max and current numbers from the dataset
     FILE* dataset;
     double num;
     double min;
     double max;
-    int first = 1;
+    int first = 1;  //A "boolean" to identify if it's the first iteration of the loop.  Set "off" (to 0) after iteration 0.
 
-    Thread *t = malloc(sizeof(Thread));
-    t = param;
+    Thread *t = malloc(sizeof(Thread));     //Allocate memory for the thread
+    t = param;                              //Point all values of t to the passed struct
 
     dataset = fopen(t->name,"r");   //Read data from dataset n file
 
@@ -146,6 +149,6 @@ void *thread_function(void *param) {
     //Calculate sum and dif
     t->sum = min + max;
     t->dif = min - max;
-
+    
     return NULL;
 }
