@@ -56,6 +56,7 @@ int main(int argc, char* argv[]) {
     }
 
     double maxF = 0, minF = 0;  //Define total max and min values
+    int first = 1;              //Defines the first iteration of the loop has not occured.  Flipped off if the first loop has occured, so maxF and minF don't need to be redefined.
 
     //Loops through all thread data to print values
     while (thrnum > 0) {
@@ -83,10 +84,11 @@ int main(int argc, char* argv[]) {
                     min = ((sum - (dif * (double)(-1))) / (double)(2));
                 }
 
-                if (i == 0) {
+                if (first == 1) {
                     //Set min and max values to the values from the first process to finish execution
                     minF = min;
                     maxF = max;
+                    first = 0;
                 }
 
                 else {
