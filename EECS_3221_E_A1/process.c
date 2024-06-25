@@ -17,6 +17,7 @@ YorkU email address: luq21@my.yorku.ca
 //Output at the end
     //MINIMUM MAXIMUM
 
+//Header files to include
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

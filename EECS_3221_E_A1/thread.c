@@ -17,6 +17,9 @@ YorkU email address: luq21@my.yorku.ca
 //Output at the end
     //MINIMUM MAXIMUM
 
+#define _GNU_SOURCE     //Defined for pthread_tryjoin_np()
+
+//Header files to include
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,6 +28,7 @@ YorkU email address: luq21@my.yorku.ca
 typedef struct thread {
     char name[50];  //Thread name (name of the dataset it's assigned to)
     int index;      //Tracks the index of the thread's memory struct in the t_mem array
+    int done;       //Tracks whether the thread has completed execution.  1 For running, 0 for complete, 2 for read.
     double sum;     //SUM = Min + Max
     double dif;     //DIF = Min - Max
 }Thread;
@@ -35,6 +39,7 @@ int main(int argc, char* argv[]) {
 
     pthread_t workers[argc - 1];    //Create the number of threads based on the number of datasets input
     Thread t_mem[argc - 1];         //Allocate heap memory for threads to store their memory to (heap shared between threads, create a struct instance)
+    int thrnum = argc - 1;          //Tracks the number of threads
 
     /*
     Create n threads for n datasets using argc and argv
@@ -45,57 +50,64 @@ int main(int argc, char* argv[]) {
     for (int i = 1; i < argc; i++) {
         strcpy(t_mem[i-1].name, argv[i]);   //Make dataset name available to the thread
         t_mem[i-1].index = i-1;             //Keep track of index in thread struct array for main thread to pull data when thread finishes execution
+        t_mem[i-1].done = 1;                //Sets the done status to "running".
         pthread_create(&workers[i-1], NULL, thread_function, &t_mem[i-1]);  //Create a thread of thread_function function, pass the struct memory to it to pass multiple pieces of data
-        pthread_join(workers[i-1], NULL);
+        pthread_tryjoin_np(workers[i-1], NULL);
     }
 
     double maxF = 0, minF = 0;  //Define total max and min values
 
     //Loops through all thread data to print values
-    for (int i = 0; i < argc - 1; i++) {
+    while (thrnum > 0) {
+        for (int i = 0; i < argc - 1; i++) {
+            if (t_mem[i].done == 0) {
+                double max, min, sum, dif;  //Instantiate max, min, sum and dif values for each dataset
+                Thread *tx = malloc(sizeof(Thread));    //Use a struct to copy struct data temporarily
+                
+                //Wait for a thread to finish execution
 
-        double max, min, sum, dif;  //Instantiate max, min, sum and dif values for each dataset
-        Thread *tx = malloc(sizeof(Thread));    //Use a struct to copy struct data temporarily
-        
-        //Wait for a thread to finish execution
+                /*Calculate max and min (use double precision)
+                    max = (sum + dif) / 2
+                    min = (sum - dif) / 2
+                Print: name SUM=sum DIF=dif MIN=min MAX=max
+                printf("%s SUM=%d DIF=%d MIN=%d MAX=%d", p->name, p->sum, p->dif, p->max);*/
 
-        /*Calculate max and min (use double precision)
-            max = (sum + dif) / 2
-            min = (sum - dif) / 2
-        Print: name SUM=sum DIF=dif MIN=min MAX=max
-        printf("%s SUM=%d DIF=%d MIN=%d MAX=%d", p->name, p->sum, p->dif, p->max);*/
+                *tx = t_mem[i]; //Copy struct data of thread that finished for processing
 
-        *tx = t_mem[i]; //Copy struct data of thread that finished for processing
+                sum = tx->sum;
+                dif = tx->dif;
 
-        sum = tx->sum;
-        dif = tx->dif;
+                //Make the difference positive for correct calculation
+                if (dif < 0) {
+                    max = ((sum + (dif * (double)(-1))) / (double)(2));
+                    min = ((sum - (dif * (double)(-1))) / (double)(2));
+                }
 
-        //Make the difference positive for correct calculation
-        if (dif < 0) {
-            max = ((sum + (dif * (double)(-1))) / (double)(2));
-            min = ((sum - (dif * (double)(-1))) / (double)(2));
+                if (i == 0) {
+                    //Set min and max values to the values from the first process to finish execution
+                    minF = min;
+                    maxF = max;
+                }
+
+                else {
+                    //If thread min < total min | total min = thread min
+                    if (min < minF)
+                        minF = min;
+
+                    //If thread max > total max | total max = thread max
+                    if (max > maxF)
+                        maxF = max;
+                }
+
+                //Print all the significant values for the thread
+                printf("%s SUM=%lf DIF=%lf MIN=%lf MAX=%lf\n", tx->name, sum, dif, min, max);
+                
+                t_mem[i].done = 2;
+                thrnum--;
+                free(tx);  //Free memory from the heap
+            }
+
         }
-
-        if (i == 0) {
-            //Set min and max values to the values from the first process to finish execution
-            minF = min;
-            maxF = max;
-        }
-
-        else {
-            //If thread min < total min | total min = thread min
-            if (min < minF)
-                minF = min;
-
-            //If thread max > total max | total max = thread max
-            if (max > maxF)
-                maxF = max;
-        }
-
-        //Print all the significant values for the thread
-        printf("%s SUM=%lf DIF=%lf MIN=%lf MAX=%lf\n", tx->name, sum, dif, min, max);
-        
-        free(tx);  //Free memory from the heap
     }
     /*All threads finished execution
         Output MAXIMUM and MINIMUM*/
@@ -150,5 +162,8 @@ void *thread_function(void *param) {
     t->sum = min + max;
     t->dif = min - max;
     
+    //Update value in struct to inform main thread that this thread has completed execution
+    t->done = 0;
+
     return NULL;
 }
