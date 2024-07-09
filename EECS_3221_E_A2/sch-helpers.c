@@ -154,6 +154,35 @@ void dequeueProcess(process_queue *q) {
     q->size--;
 }
 
+/* removes a process from the process queue pointed to by `q', using the key p->pid */
+void removeProcess(process_queue *q, process *p) {
+    process_node *deleted = q->front;
+    process_node *prev;
+
+    assert(q->size > 0);
+
+    //If the first or only element in the queue, dequeueProcess does the work for us, since we just need to remove the top element
+    if (q->size == 1 || deleted->data->pid == p->pid) dequeueProcess(q);
+    
+    else {
+        prev = q->front;
+        deleted = deleted->next;
+
+        for (int i = 1; i < q->size; i++) {
+            if (deleted->data->pid == p->pid) break;
+            else {
+                prev = prev->next;
+                deleted = deleted->next;
+            }
+        }
+        //Point the previous node to the node after the one selected for deletion
+        prev->next = deleted->next;
+        //free(prev);
+        //free(deleted);
+        q->size--;
+    }
+}
+
 /** Input/output functions **/
 
 /* reads a line from stdin and returns it (in dynamically allocated space) */

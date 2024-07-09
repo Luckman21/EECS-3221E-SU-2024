@@ -85,6 +85,7 @@ process_node *createProcessNode(process *);
 void initializeProcessQueue(process_queue *);
 void enqueueProcess(process_queue *, process *);
 void dequeueProcess(process_queue *);
+void removeProcess(process_queue *q, process *p);
 
 /** Input/output functions **/
 char *readLine(void);

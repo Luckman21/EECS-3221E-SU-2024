@@ -149,7 +149,7 @@ int main(int argc, char* argv[]) {
                     finish[processes_complete] = *temp;
                     processes_complete++;
                 }
-                dequeueProcess(execute);
+                removeProcess(execute, temp);
                 node = execute->front;
             }
             else node = node->next;
@@ -170,8 +170,7 @@ int main(int argc, char* argv[]) {
                 if (temp->currentBurst < temp->numberOfBursts) {
                     
                     if (temp->bursts[temp->currentBurst].length == 0) {
-                        temp->currentBurst++;
-                        enqueueProcess(waitQ, temp); //No CPU burst, blocked, so place in wait queue
+                        temp->currentBurst++;   //No CPU burst, blocked, so keep in wait queue
                     }
                     else enqueueProcess(tempReady, temp);    //Enqueue in the temp ready queue to be sorted before being queued into the ready queue
                 }
@@ -184,7 +183,7 @@ int main(int argc, char* argv[]) {
                     finish[processes_complete] = *temp;
                     processes_complete++;
                 }
-                dequeueProcess(waitQ);
+                removeProcess(waitQ, temp);
                 node = waitQ->front;
             }
             else node = node->next;
@@ -194,6 +193,9 @@ int main(int argc, char* argv[]) {
         for (int i = 0; i < tempReady->size; i++) enqueueProcess(readyQ, temp);   //Place in ready queue
         while (tempReady->size > 0) dequeueProcess(tempReady);
 
+        if (clk == 8050){
+            printf("here");
+        }
         clk++;
     }
 
