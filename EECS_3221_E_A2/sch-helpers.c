@@ -115,7 +115,8 @@ process_node *createProcessNode(process *p) {
 
 /* performs basic initialization on the process queue `q' */
 void initializeProcessQueue(process_queue *q) {
-    q->front = q->back = NULL;
+    q->front = NULL;
+    q->back = NULL;
     q->size = 0;
 }
 
@@ -264,7 +265,6 @@ int empty(char *s) {
    (also returns COMMENT_LINE in event of a comment, signified by a leading
     COMMENT_CHAR character, being read.) */
 int readProcess(process *dest) {
-    int i;
     int pid = -1;
     int arrivalTime = 0;
     int firstBurst = 0;
@@ -330,5 +330,9 @@ int compareByArrival(const void *aa, const void *bb) {
     process *b = (process*) bb;
     if (a->arrivalTime < b->arrivalTime) return -1;
     if (a->arrivalTime > b->arrivalTime) return 1;
+    if (a->arrivalTime == b->arrivalTime) {
+        if (a->pid < b->pid) return -1;
+        if (a->pid > b->pid) return 1;
+    }
     return 0;
 }
