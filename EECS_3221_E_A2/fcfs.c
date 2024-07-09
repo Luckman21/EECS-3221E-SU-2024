@@ -85,6 +85,7 @@ int main(int argc, char* argv[]) {
     execute = malloc(sizeof(process_queue));
     tempReady = malloc(sizeof(process_queue));
     node = malloc(sizeof(process_node));
+    temp = malloc(sizeof(process));
 
     initializeProcessQueue(readyQ);
     initializeProcessQueue(waitQ);
@@ -108,7 +109,6 @@ int main(int argc, char* argv[]) {
         for (int i = 0; i < MAX_CPUS; i++) {
             if (i > readyQ->size || readyQ->size == 0) break;   //If there are less processes in the ready queue than the number of CPUs
             else {
-                temp = malloc(sizeof(process));
                 node = readyQ->front;
                 temp = node->data;
                 enqueueProcess(execute, temp);
@@ -122,8 +122,6 @@ int main(int argc, char* argv[]) {
         //Simulate a CPU burst x 4 CPUs.  Only runs up to 4 instructions per clk cycle, since we are simulating 4 homogenous CPUs.
         node = execute->front;
         for (int i = 0; i < execute->size; i++) {
-
-            temp = malloc(sizeof(process));
             temp = node->data;
 
             cpu(temp);  //Complete 1 cycle of a CPU burst on the chosen process
@@ -160,7 +158,6 @@ int main(int argc, char* argv[]) {
         //Complete an I/O burst for each process in the wait queue
         node = waitQ->front;
         for (int i = 0; i < waitQ->size; i++) {
-            temp = malloc(sizeof(process));
             temp = node->data;
 
             io(temp);  //Complete 1 cycle of an I/O burst on the chosen process
@@ -193,7 +190,7 @@ int main(int argc, char* argv[]) {
             else node = node->next;
         }
 
-        qsort(tempReady, tempReady->size, sizeof(process), compareByPID);   //Sort in order of PID (since they all arrive on the same clock cycle)
+        if (tempReady->size > 1) qsort(tempReady, tempReady->size, sizeof(process), compareByPID);   //Sort in order of PID (since they all arrive on the same clock cycle)
         for (int i = 0; i < tempReady->size; i++) enqueueProcess(readyQ, temp);   //Place in ready queue
         while (tempReady->size > 0) dequeueProcess(tempReady);
 
@@ -211,7 +208,7 @@ int main(int argc, char* argv[]) {
     s->last_pids[0] = finish[numberOfProcesses - 1].pid;
 
     //Add processes to the final process array if they have the same finish time
-    for (int i = numberOfProcesses - 1; i > 0; i--) {
+    for (int i = numberOfProcesses - 2; i > 0; i--) {
         if (finish[i].endTime == finish[numberOfProcesses - 1].endTime) {
              s->last_pids[last] = finish[i].pid;
              last++;
