@@ -18,10 +18,10 @@ YorkU email address: luq21@my.yorku.ca
  * @brief A struct to store a summary of information related to the CPU Scheduling.
  */
 typedef struct Summary {
-    double avg_wait;                    //Average waiting time.
-    double avg_turn;                    //Average turnaround time.
+    float avg_wait;                    //Average waiting time.
+    float avg_turn;                    //Average turnaround time.
     int cpu_runtime;                    //Total runtime of the CPU (clk).
-    double cpu_util;                    //CPU Utilization (0 - 400%), 100% max per processor.  Add all the CPU util scores here, then divide by (4 * cpu_runtime) to get score.
+    float cpu_util;                    //CPU Utilization (0 - 400%), 100% max per processor.  Add all the CPU util scores here, then divide by (4 * cpu_runtime) to get score.
     int context_switch;                 //How many context switches occured (not including loading new processes after another terminates).
     int last_pids[MAX_PROCESSES + 1];   //Last process(es) to finish
 }summary;
@@ -47,7 +47,6 @@ int cpu(process *p) {
 //Simulates an I/O burst
 int io(process *p) {
     p->bursts[p->currentBurst].step++;
-    p->waitingTime++;
     return 0;
 }
 
@@ -83,8 +82,6 @@ int main(int argc, char* argv[]) {
 
     //Order by arrival time (or lowest PID if the arrival time is the same)
     qsort(processes, numberOfProcesses, sizeof(process), compareByArrival);
-
-    //s->cpu_start = 
 
     //Set up wait and ready queues
     readyQ = malloc(sizeof(process_queue));
@@ -132,7 +129,6 @@ int main(int argc, char* argv[]) {
             temp = node->data;
 
             if (temp->currentBurst == temp->numberOfBursts && temp->bursts[temp->currentBurst].step == temp->bursts[temp->currentBurst].length) {
-                s->avg_wait += (double)(temp->waitingTime);
                 s->avg_turn += (double)(clk - temp->arrivalTime);
                 temp->endTime = clk;
                 finish[processes_complete] = *temp;
@@ -160,7 +156,6 @@ int main(int argc, char* argv[]) {
 
                     //The process has completed it's final burst (CPU)
                     else {
-                        s->avg_wait += (double)(temp->waitingTime);
                         s->avg_turn += (double)(clk - temp->arrivalTime);
                         temp->endTime = clk;
                         finish[processes_complete] = *temp;
@@ -196,7 +191,6 @@ int main(int argc, char* argv[]) {
 
                 //The process has completed it's final burst (I/O)
                 else {
-                    s->avg_wait += (double)(temp->waitingTime);
                     s->avg_turn += (double)(clk - temp->arrivalTime);
                     temp->endTime = clk;
                     finish[processes_complete] = *temp;
@@ -207,6 +201,8 @@ int main(int argc, char* argv[]) {
             }
             else node = node->next;
         }
+
+        if (readyQ->size > 0) s->avg_wait += readyQ->size;
 
         if (tempReady->size > 0) {
             process *tempArr[tempReady->size];
@@ -224,19 +220,15 @@ int main(int argc, char* argv[]) {
             }
             while (tempReady->size > 0) dequeueProcess(tempReady);
             }
-
-            if (clk == 6489 || clk == 2505 || clk == 2596) {
-                printf("here");
-        }
         clk++;
     }
 
     //All processes have finished execution, compute summary values
     s->cpu_runtime = clk; //Compute total CPU runtime
-    s->cpu_util /= (MAX_CPUS * s->cpu_runtime); //Compute the Average CPU Utilization. (cpu_util / (4 * clk))
-    s->cpu_util *= (double)(100);
-    s->avg_wait /= (double)(numberOfProcesses); //Average wait = Total wait / # of processes
-    s->avg_turn /= (double)(numberOfProcesses); //Average turn = Total turn / # of processes
+    s->cpu_util /= (s->cpu_runtime); //Compute the Average CPU Utilization. (cpu_util / (4 * clk))
+    s->cpu_util *= (float)(100);
+    s->avg_wait /= (float)(numberOfProcesses); //Average wait = Total wait / # of processes
+    s->avg_turn /= (float)(numberOfProcesses); //Average turn = Total turn / # of processes
 
     int last = 1;   //The number of processes that finished last
 
@@ -248,14 +240,16 @@ int main(int argc, char* argv[]) {
              s->last_pids[last] = finish[i].pid;
              last++;
         }
+        else break;
     }
 
-    printf("Average waiting time: %lf units\nAverage turnaround time: %lf units\nTime all processes finished: %d\nAverage CPU utilization: %lf%%\nNumber of context switches: %d\nPID(s) of last process(es) to finish: ", s->avg_wait, s->avg_turn, s->cpu_runtime, s->cpu_util, s->context_switch);
+    printf("Average waiting time: %.2f units\nAverage turnaround time: %.2f units\nTime all processes finished: %d\nAverage CPU utilization: %.1f%%\nNumber of context switches: %d\nPID(s) of last process(es) to finish: ", s->avg_wait, s->avg_turn, s->cpu_runtime, s->cpu_util, s->context_switch);
     for (int i = 0; i < last; i++) {
         printf("%d", s->last_pids[i]);
 
         if (i < last - 1) printf(", ");  //Formatting output of the print all final PIDs
     }
+    printf("\n");
 
     //Free dynamically allocated memory from the heap to prevent a memory leak
     free(readyQ);
@@ -263,7 +257,5 @@ int main(int argc, char* argv[]) {
     free(execute);
     free(tempReady);
     free(node);
-    free(temp);
-
     return 0;
 }
