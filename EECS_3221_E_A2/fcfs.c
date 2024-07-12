@@ -8,7 +8,7 @@ YorkU email address: luq21@my.yorku.ca
 
 #define MAX_CPUS 4  //Number of simulated CPUs = 4
 
-#include "sch-helpers.c"    //Change to h on Linux
+#include "sch-helpers.h"    //Change to h on Linux
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -27,6 +27,7 @@ typedef struct Summary {
 }summary;
 
 process processes[MAX_PROCESSES + 1];   //A large structure array to hold all processes read from data file 
+process *tempArr[MAX_PROCESSES + 1];    //An array to temporarily store processes entering the ready queue.  Used to impose qsort upon.
 process_queue *readyQ;                  //Ready Queue
 process_queue *waitQ;                   //Waiting queue
 process_queue *execute;                 //Processes currently under execution (max of 4)
@@ -101,6 +102,12 @@ int main(int argc, char* argv[]) {
     //While loop, clk, add processes to ready queue based on FCFS scheduling
     while (processes_complete < numberOfProcesses) {
 
+        //Re-initialize queues if size is 0 to avoid segmentation fault
+        if (readyQ->size == 0) initializeProcessQueue(readyQ);
+        if (waitQ->size == 0) initializeProcessQueue(waitQ);
+        if (execute->size == 0) initializeProcessQueue(execute);
+        if (tempReady->size == 0) initializeProcessQueue(tempReady);
+
         //Add arrived processes to the ready queue
         while (index <= numberOfProcesses) {
             if (processes[index].arrivalTime == clk) {
@@ -145,7 +152,7 @@ int main(int argc, char* argv[]) {
 
                     //If this is not the last burst for this process, context switch and enqueue back to the appropriate queue
                     if (temp->currentBurst < temp->numberOfBursts) {
-                        s->context_switch++;
+                        //s->context_switch++;
                         
                         if (temp->bursts[temp->currentBurst].length == 0) {
                             temp->currentBurst++;
@@ -205,27 +212,26 @@ int main(int argc, char* argv[]) {
         if (readyQ->size > 0) s->avg_wait += readyQ->size;
 
         if (tempReady->size > 0) {
-            process *tempArr[tempReady->size];
-
             node = tempReady->front;
             for (int i = 0; i < tempReady->size; i++) {
                 tempArr[i] = node->data;
                 node = node->next;
             }
 
-            if (tempReady->size > 1) qsort(tempArr, tempReady->size, sizeof(process), compareByPID);   //Sort in order of PID (since they all arrive on the same clock cycle)
-            
+            if (tempReady->size > 1) {
+                qsort(*tempArr, tempReady->size, sizeof(process), compareByPID);   //Sort in order of PID (since they all arrive on the same clock cycle)
+            }
             for (int i = 0; i < tempReady->size; i++) {
                 enqueueProcess(readyQ, tempArr[i]);   //Place in ready queue
             }
             while (tempReady->size > 0) dequeueProcess(tempReady);
-            }
+        }
         clk++;
     }
 
     //All processes have finished execution, compute summary values
     s->cpu_runtime = clk; //Compute total CPU runtime
-    s->cpu_util /= (s->cpu_runtime); //Compute the Average CPU Utilization. (cpu_util / (4 * clk))
+    s->cpu_util /= (float)(MAX_CPUS * s->cpu_runtime); //Compute the Average CPU Utilization. (cpu_util / (4 * clk))
     s->cpu_util *= (float)(100);
     s->avg_wait /= (float)(numberOfProcesses); //Average wait = Total wait / # of processes
     s->avg_turn /= (float)(numberOfProcesses); //Average turn = Total turn / # of processes
