@@ -8,7 +8,7 @@ YorkU email address: luq21@my.yorku.ca
 
 #define MAX_CPUS 4  //Number of simulated CPUs = 4
 
-#include "sch-helpers.h"    //Change to h on Linux
+#include "sch-helpers.h"    //Change to h on Linux, c on Windows
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -20,10 +20,10 @@ YorkU email address: luq21@my.yorku.ca
 typedef struct Summary {
     float avg_wait;                    //Average waiting time.
     float avg_turn;                    //Average turnaround time.
-    int cpu_runtime;                    //Total runtime of the CPU (clk).
+    int cpu_runtime;                   //Total runtime of the CPU (clk).
     float cpu_util;                    //CPU Utilization (0 - 400%), 100% max per processor.  Add all the CPU util scores here, then divide by (4 * cpu_runtime) to get score.
-    int context_switch;                 //How many context switches occured (not including loading new processes after another terminates).
-    int last_pids[MAX_PROCESSES + 1];   //Last process(es) to finish
+    int context_switch;                //How many context switches occured (not including loading new processes after another terminates).
+    int last_pids[MAX_PROCESSES + 1];  //Last process(es) to finish
 }summary;
 
 process processes[MAX_PROCESSES + 1];   //A large structure array to hold all processes read from data file 
@@ -34,7 +34,7 @@ process_queue *execute;                 //Processes currently under execution (m
 process_queue *tempReady;               //Stores an unsorted queue of processes that needs to be sorted before joining the ready queue
 process_node *node;                     //Used as a node to iterate through queues
 process *temp;                          //Represents a process temporarily for execution purposes
-int numberOfProcesses = -1;              //Total number of processes
+int numberOfProcesses = -1;             //Total number of processes
 int processes_complete = 0;             //Total number of processes completed
 int clk = 0;                            //A simulated representation of the clock
 summary *s;                             //A log of summary events to be answered at the end of execution
@@ -51,6 +51,13 @@ int io(process *p) {
     return 0;
 }
 
+/**
+ * @brief Compares two processes by their PID.  Lower PID comes first.
+ * 
+ * @param aa Process A
+ * @param bb Process B
+ * @return int -1 if A.PID < B.PID.  1 if opposite.  0 if equal.
+ */
 int compareByPID(const void *aa, const void *bb) {
     process *a = (process*) aa;
     process *b = (process*) bb;
@@ -102,12 +109,6 @@ int main(int argc, char* argv[]) {
     //While loop, clk, add processes to ready queue based on FCFS scheduling
     while (processes_complete < numberOfProcesses) {
 
-        //Re-initialize queues if size is 0 to avoid segmentation fault
-        if (readyQ->size == 0) initializeProcessQueue(readyQ);
-        if (waitQ->size == 0) initializeProcessQueue(waitQ);
-        if (execute->size == 0) initializeProcessQueue(execute);
-        if (tempReady->size == 0) initializeProcessQueue(tempReady);
-
         //Add arrived processes to the ready queue
         while (index <= numberOfProcesses) {
             if (processes[index].arrivalTime == clk) {
@@ -152,7 +153,7 @@ int main(int argc, char* argv[]) {
 
                     //If this is not the last burst for this process, context switch and enqueue back to the appropriate queue
                     if (temp->currentBurst < temp->numberOfBursts) {
-                        //s->context_switch++;
+                        //s->context_switch++; (For preemtive scheduling only)
                         
                         if (temp->bursts[temp->currentBurst].length == 0) {
                             temp->currentBurst++;
@@ -232,7 +233,7 @@ int main(int argc, char* argv[]) {
     //All processes have finished execution, compute summary values
     s->cpu_runtime = clk; //Compute total CPU runtime
     s->cpu_util /= (float)(MAX_CPUS * s->cpu_runtime); //Compute the Average CPU Utilization. (cpu_util / (4 * clk))
-    s->cpu_util *= (float)(100);
+    s->cpu_util *= (float)(100);    //Average CPU Utilization, multiplied by 100 to get a % value
     s->avg_wait /= (float)(numberOfProcesses); //Average wait = Total wait / # of processes
     s->avg_turn /= (float)(numberOfProcesses); //Average turn = Total turn / # of processes
 
@@ -249,7 +250,7 @@ int main(int argc, char* argv[]) {
         else break;
     }
 
-    printf("Average waiting time: %.2f units\nAverage turnaround time: %.2f units\nTime all processes finished: %d\nAverage CPU utilization: %.1f%%\nNumber of context switches: %d\nPID(s) of last process(es) to finish: ", s->avg_wait, s->avg_turn, s->cpu_runtime, s->cpu_util, s->context_switch);
+    printf("Average waiting time                 : %.2f units\nAverage turnaround time              : %.2f units\nTime all processes finished          : %d\nAverage CPU utilization              : %.1f%%\nNumber of context switches           : %d\nPID(s) of last process(es) to finish : ", s->avg_wait, s->avg_turn, s->cpu_runtime, s->cpu_util, s->context_switch);
     for (int i = 0; i < last; i++) {
         printf("%d", s->last_pids[i]);
 
