@@ -119,7 +119,7 @@ int main(int argc, char* argv[]) {
         }
 
         for (int i = 0; i < MAX_CPUS; i++) {
-            if (i > readyQ->size || readyQ->size == 0) break;   //If there are less processes in the ready queue than the number of CPUs
+            if (readyQ->size == 0) break;   //If there are less processes in the ready queue than the number of CPUs
             else {
                 node = readyQ->front;
                 temp = node->data;
@@ -128,8 +128,11 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        //Move processes to waiting queue if blocked
+        //Increment CPU Util based on the number of processes executing
         s->cpu_util += execute->size;
+
+        //If there are processes waiting in the ready queue, add to the total average waiting time
+        s->avg_wait += readyQ->size;
 
         //Simulate a CPU burst x 4 CPUs.  Only runs up to 4 instructions per clk cycle, since we are simulating 4 homogenous CPUs.
         node = execute->front;
@@ -209,8 +212,6 @@ int main(int argc, char* argv[]) {
             }
             else node = node->next;
         }
-
-        if (readyQ->size > 0) s->avg_wait += readyQ->size;
 
         if (tempReady->size > 0) {
             node = tempReady->front;
