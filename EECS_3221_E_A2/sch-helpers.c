@@ -368,3 +368,20 @@ int compareByArrival(const void *aa, const void *bb) {
     }
     return 0;
 }
+
+/* comparator for process structs that orders them by earliest finish time,
+   breaking ties by smallest pid.
+   That is, process a is less than process b iff:
+        a arrives before b, OR
+        they arrive at the same time and pid(a) < pid(b). */
+int compareByFinish(const void *aa, const void *bb) {
+    process *a = (process*) aa;
+    process *b = (process*) bb;
+    if (a->endTime < b->endTime) return -1;
+    if (a->endTime > b->endTime) return 1;
+    if (a->endTime == b->endTime) {
+        if (a->pid < b->pid) return -1;
+        if (a->pid > b->pid) return 1;
+    }
+    return 0;
+}

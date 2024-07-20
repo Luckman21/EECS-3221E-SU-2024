@@ -51,6 +51,18 @@ int io(process *p) {
     return 0;
 }
 
+int listProcesses(process_queue *q, char name[20]) {
+    process_node *n = malloc(sizeof(process_node));
+
+    n = q->front;
+    printf("\n%s Queue\n-----\n", name);
+
+    for (int i = 0; i < q->size; i++) {
+        printf("P%d\n", n->data->pid);
+        n = n->next;
+    }
+}
+
 /**
  * @brief Compares two processes by their PID.  Lower PID comes first.
  * 
@@ -119,7 +131,7 @@ int main(int argc, char* argv[]) {
         }
 
         for (int i = 0; i < MAX_CPUS; i++) {
-            if (readyQ->size == 0) break;   //If there are less processes in the ready queue than the number of CPUs
+            if (readyQ->size == 0 || execute->size == 4) break;   //If there are no processes in the ready queue or execute queue is full
             else {
                 node = readyQ->front;
                 temp = node->data;
@@ -239,6 +251,8 @@ int main(int argc, char* argv[]) {
     s->avg_turn /= (float)(numberOfProcesses); //Average turn = Total turn / # of processes
 
     int last = 1;   //The number of processes that finished last
+
+    qsort(finish, numberOfProcesses, sizeof(process), compareByFinish);
 
     s->last_pids[0] = finish[numberOfProcesses - 1].pid;
 

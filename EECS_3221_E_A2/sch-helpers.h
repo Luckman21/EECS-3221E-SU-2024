@@ -95,4 +95,5 @@ int readBracedInt(char **);
 int empty(char *);
 int readProcess(process *);
 int compareByArrival(const void *, const void *);
+int compareByFinish(const void *aa, const void *bb);
 
