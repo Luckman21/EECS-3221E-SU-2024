@@ -27,7 +27,7 @@ typedef struct Summary {
 }summary;
 
 process processes[MAX_PROCESSES + 1];   //A large structure array to hold all processes read from data file 
-process *tempArr[MAX_PROCESSES + 1];    //An array to temporarily store processes entering the ready queue.  Used to impose qsort upon.
+process tempArr[MAX_PROCESSES + 1];    //An array to temporarily store processes entering the ready queue.  Used to impose qsort upon.
 process_queue *readyQ;                  //Ready Queue
 process_queue *waitQ;                   //Waiting queue
 process_queue *execute;                 //Processes currently under execution (max of 4)
@@ -39,19 +39,31 @@ int processes_complete = 0;             //Total number of processes completed
 int clk = 0;                            //A simulated representation of the clock
 summary *s;                             //A log of summary events to be answered at the end of execution
 
-//Simulates a CPU burst
-int cpu(process *p) {
+/**
+ * @brief A function used to simulate a CPU burst.  Decriments the current CPU burst by 1, simulating 1 execution cycle.
+ * 
+ * @param p The specified process executing on the CPU.
+ */
+void cpu(process *p) {
     p->bursts[p->currentBurst].step++;
-    return 0;
 }
 
-//Simulates an I/O burst
-int io(process *p) {
+/**
+ * @brief A function used to simulate an I/O burst.  Decriments the current I/O burst by 1, simulating 1 wait cycle.
+ * 
+ * @param p The specified process waiting for I/O in the wait queue.
+ */
+void io(process *p) {
     p->bursts[p->currentBurst].step++;
-    return 0;
 }
 
-int listProcesses(process_queue *q, char name[20]) {
+/**
+ * @brief A function that lists all the processes in the specified queue.
+ * 
+ * @param q A process queue struct, the process queue you want to investigate.
+ * @param name The name of the queue you want to display when printing the contents.
+ */
+void listProcesses(process_queue *q, char name[20]) {
     process_node *n = malloc(sizeof(process_node));
 
     n = q->front;
@@ -61,6 +73,54 @@ int listProcesses(process_queue *q, char name[20]) {
         printf("P%d\n", n->data->pid);
         n = n->next;
     }
+}
+
+/**
+ * @brief A function used to output a list of all PIDs currently in a queue.  Used soley for debugging.
+ * 
+ * @param q A process queue
+ * @param name The specified queue name
+ * @return int Returns -1 if there are duplicate processes in the queue.  0 if the back process is not the same as the last process in the queue.  1 otherwise.
+ */
+int monitorQueue(process_queue *q, char name[20]) {
+    process_node *n = malloc(sizeof(process_node));
+
+    int pids[q->size];
+
+    n = q->front;
+    for (int i = 1; i < q->size; i++) {
+        pids[i-1] = n->data->pid;
+        n = n->next;
+    }
+    pids[q->size-1] = n->data->pid;
+
+    for (int i = 0; i < q->size; i ++) {
+        for (int j = i + 1; j < q->size; j++){
+            if (pids[i] == pids[j]) return -1;
+        }
+    }
+
+    if (n->data->pid != q->back->data->pid) return 0;
+    else return 1;
+}
+
+/**
+ * @brief Checks if there are duplicate PIDs in a queue (bad case).  Used soley for debugging.
+ * 
+ * @param q A process queue
+ * @param p A process to compare
+ * @return int -1 if the process specified shares a PID with another process already in the queue. 0 otherwise.
+ */
+int dupe(process_queue *q, process *p) {
+    process_node *n = malloc(sizeof(process_node));
+
+    n = q->front;
+    for (int i = 0; i < q->size; i++) {
+        if (n->data->pid == p->pid)
+            return -1;
+        n = n->next;
+    }
+    return 0;
 }
 
 /**
@@ -122,12 +182,11 @@ int main(int argc, char* argv[]) {
     while (processes_complete < numberOfProcesses) {
 
         //Add arrived processes to the ready queue
-        while (index <= numberOfProcesses) {
-            if (processes[index].arrivalTime == clk) {
-                enqueueProcess(readyQ, &processes[index]);
+        for (int i = 0; i < numberOfProcesses; i++) {
+            if (processes[i].arrivalTime == clk) {
+                enqueueProcess(readyQ, &processes[i]);
                 index++;
             }
-            else break;
         }
 
         for (int i = 0; i < MAX_CPUS; i++) {
@@ -151,44 +210,35 @@ int main(int argc, char* argv[]) {
         for (int i = 0; i < execute->size; i++) {
             temp = node->data;
 
-            if (temp->currentBurst == temp->numberOfBursts && temp->bursts[temp->currentBurst].step == temp->bursts[temp->currentBurst].length) {
-                s->avg_turn += (double)(clk - temp->arrivalTime);
-                temp->endTime = clk;
-                finish[processes_complete] = *temp;
-                processes_complete++;
+            cpu(temp);  //Complete 1 cycle of a CPU burst on the chosen process
+        
+            //If the process has completed it's entire CPU burst
+            if (temp->bursts[temp->currentBurst].step == temp->bursts[temp->currentBurst].length) {
+                temp->currentBurst++;   //Increment the burst index
+
+                //If this is not the last burst for this process, context switch and enqueue back to the appropriate queue
+                if (temp->currentBurst < temp->numberOfBursts) {
+                    //s->context_switch++; (For preemtive scheduling only)
+                    
+                    if (temp->bursts[temp->currentBurst].length == 0) {
+                        temp->currentBurst++;
+                        
+                        enqueueProcess(tempReady, temp);  //No I/O burst, not blocked, so place in temp ready queue for sorting before placing in ready queue
+                    }
+                    else enqueueProcess(waitQ, temp);   //I/O burst, so place in wait queue
+                }
+
+                //The process has completed it's final burst (CPU)
+                else {
+                    s->avg_turn += (double)(clk - temp->arrivalTime);
+                    temp->endTime = clk;
+                    finish[processes_complete] = *temp;
+                    processes_complete++;
+                }
+                node = node->next;
                 removeProcess(execute, temp);
             }
-
-            else {
-                cpu(temp);  //Complete 1 cycle of a CPU burst on the chosen process
-            
-                //If the process has completed it's entire CPU burst
-                if (temp->bursts[temp->currentBurst].step == temp->bursts[temp->currentBurst].length) {
-                    temp->currentBurst++;   //Increment the burst index
-
-                    //If this is not the last burst for this process, context switch and enqueue back to the appropriate queue
-                    if (temp->currentBurst < temp->numberOfBursts) {
-                        //s->context_switch++; (For preemtive scheduling only)
-                        
-                        if (temp->bursts[temp->currentBurst].length == 0) {
-                            temp->currentBurst++;
-                            enqueueProcess(tempReady, temp);  //No I/O burst, not blocked, so place in temp ready queue for sorting before placing in ready queue
-                        }
-                        else enqueueProcess(waitQ, temp);   //I/O burst, so place in wait queue
-                    }
-
-                    //The process has completed it's final burst (CPU)
-                    else {
-                        s->avg_turn += (double)(clk - temp->arrivalTime);
-                        temp->endTime = clk;
-                        finish[processes_complete] = *temp;
-                        processes_complete++;
-                    }
-                    node = node->next;
-                    removeProcess(execute, temp);
-                }
-                else node = node->next;
-            }
+            else node = node->next;
         }
 
         //Complete an I/O burst for each process in the wait queue
@@ -205,11 +255,10 @@ int main(int argc, char* argv[]) {
                 //If this is not the last burst for this process, context switch and enqueue back to the appropriate queue
                 if (temp->currentBurst < temp->numberOfBursts) {
                     
-                    /*
                     if (temp->bursts[temp->currentBurst].length == 0) {
                         temp->currentBurst++;   //No CPU burst, blocked, so keep in wait queue
-                    }*/
-                    enqueueProcess(tempReady, temp);    //Enqueue in the temp ready queue to be sorted before being queued into the ready queue
+                    }
+                    else enqueueProcess(tempReady, temp);    //Enqueue in the temp ready queue to be sorted before being queued into the ready queue
                 }
 
                 //The process has completed it's final burst (I/O)
@@ -226,18 +275,30 @@ int main(int argc, char* argv[]) {
         }
 
         if (tempReady->size > 0) {
-            node = tempReady->front;
-            for (int i = 0; i < tempReady->size; i++) {
-                tempArr[i] = node->data;
-                node = node->next;
-            }
 
             if (tempReady->size > 1) {
-                qsort(*tempArr, tempReady->size, sizeof(process), compareByPID);   //Sort in order of PID (since they all arrive on the same clock cycle)
+
+                node = tempReady->front;
+                for (int i = 0; i < tempReady->size; i++) {
+                    tempArr[i] = *node->data;
+                    node = node->next;
+                }
+
+                qsort(tempArr, tempReady->size, sizeof(process), compareByPID);   //Sort in order of PID (since they all arrive on the same clock cycle)
+
+                for (int i = 0; i < tempReady->size; i++) {
+
+                    node = tempReady->front;
+                    for (int j = 0; j < tempReady->size; j++) {
+                        if (node->data->pid == tempArr[i].pid) {
+                            enqueueProcess(readyQ, node->data);   //Place in ready queue
+                            break;
+                        }
+                        else node = node->next;
+                    }
+                }
             }
-            for (int i = 0; i < tempReady->size; i++) {
-                enqueueProcess(readyQ, tempArr[i]);   //Place in ready queue
-            }
+            else enqueueProcess(readyQ, tempReady->front->data);
             while (tempReady->size > 0) dequeueProcess(tempReady);
         }
         clk++;
@@ -245,14 +306,12 @@ int main(int argc, char* argv[]) {
 
     //All processes have finished execution, compute summary values
     s->cpu_runtime = clk; //Compute total CPU runtime
-    s->cpu_util /= (float)(MAX_CPUS * s->cpu_runtime); //Compute the Average CPU Utilization. (cpu_util / (4 * clk))
+    s->cpu_util /= (float)(s->cpu_runtime); //Compute the Average CPU Utilization. (cpu_util / (4 * clk))
     s->cpu_util *= (float)(100);    //Average CPU Utilization, multiplied by 100 to get a % value
     s->avg_wait /= (float)(numberOfProcesses); //Average wait = Total wait / # of processes
     s->avg_turn /= (float)(numberOfProcesses); //Average turn = Total turn / # of processes
 
     int last = 1;   //The number of processes that finished last
-
-    qsort(finish, numberOfProcesses, sizeof(process), compareByFinish);
 
     s->last_pids[0] = finish[numberOfProcesses - 1].pid;
 
@@ -265,7 +324,7 @@ int main(int argc, char* argv[]) {
         else break;
     }
 
-    printf("Average waiting time                 : %.2f units\nAverage turnaround time              : %.2f units\nTime all processes finished          : %d\nAverage CPU utilization              : %.1f%%\nNumber of context switches           : %d\nPID(s) of last process(es) to finish : ", s->avg_wait, s->avg_turn, s->cpu_runtime, s->cpu_util, s->context_switch);
+    printf("Average waiting time : %.2f units\nAverage turnaround time : %.2f units\nTime all processes finished : %d\nAverage CPU utilization : %.1f%%\nNumber of context switches : %d\nPID(s) of last process(es) to finish : ", s->avg_wait, s->avg_turn, s->cpu_runtime, s->cpu_util, s->context_switch);
     for (int i = 0; i < last; i++) {
         printf("%d", s->last_pids[i]);
 
