@@ -27,7 +27,7 @@ typedef struct Summary {
 }summary;
 
 process processes[MAX_PROCESSES + 1];   //A large structure array to hold all processes read from data file 
-process tempArr[MAX_PROCESSES + 1];    //An array to temporarily store processes entering the ready queue.  Used to impose qsort upon.
+process tempArr[MAX_PROCESSES + 1];     //An array to temporarily store processes entering the ready queue.  Used to impose qsort upon.
 process_queue *readyQ;                  //Ready Queue
 process_queue *waitQ;                   //Waiting queue
 process_queue *execute;                 //Processes currently under execution (max of 4)
@@ -37,19 +37,22 @@ process *temp;                          //Represents a process temporarily for e
 int numberOfProcesses = -1;             //Total number of processes
 int processes_complete = 0;             //Total number of processes completed
 int clk = 0;                            //A simulated representation of the clock
+int quantum;                            //The time quantum specified by terminal parameters
+char *q_pointer;                        //A char pointer used for strtol to convert the arg parameter from char array pointer to int
 summary *s;                             //A log of summary events to be answered at the end of execution
 
 /**
- * @brief A function used to simulate a CPU burst.  Decriments the current CPU burst by 1, simulating 1 execution cycle.
+ * @brief A function used to simulate a CPU burst.  Increments the current CPU burst by 1 and decrements the remaining quantum time, simulating 1 execution cycle. 
  * 
  * @param p The specified process executing on the CPU.
  */
 void cpu(process *p) {
-    p->bursts[p->currentBurst].step++;
+    p->bursts[p->currentBurst].step++;  //Increment a burst by 1
+    p->quantumRemaining--;              //Decrement the time quantum remaining by 1
 }
 
 /**
- * @brief A function used to simulate an I/O burst.  Decriments the current I/O burst by 1, simulating 1 wait cycle.
+ * @brief A function used to simulate an I/O burst.  Increments the current I/O burst by 1, simulating 1 wait cycle.
  * 
  * @param p The specified process waiting for I/O in the wait queue.
  */
@@ -148,12 +151,15 @@ int main(int argc, char* argv[]) {
     s->cpu_util = 0;
     s->context_switch = 0; 
 
+    quantum = strtol(argv[1], &q_pointer, 10); //Assigns the quantum based on the specified input.  strtol converts char array pointer to int, in specified base 10
+
     int info = 1;   //Stores the return value from readProcess to determine if there is still more input to be parsed
     int index = 0;  //Points to the current index of processes[] array to be filled
 
     //For loop, store process data for all processes in the processes array
     while (info == 1) {
         info = readProcess(&processes[index]);
+        processes[index].quantumRemaining = quantum;    //Give each process the max quantum upon initialization
         numberOfProcesses++;
         index++;
     }
@@ -218,7 +224,6 @@ int main(int argc, char* argv[]) {
 
                 //If this is not the last burst for this process, context switch and enqueue back to the appropriate queue
                 if (temp->currentBurst < temp->numberOfBursts) {
-                    //s->context_switch++; (For preemtive scheduling only)
                     
                     if (temp->bursts[temp->currentBurst].length == 0) {
                         temp->currentBurst++;
@@ -238,6 +243,14 @@ int main(int argc, char* argv[]) {
                 node = node->next;
                 removeProcess(execute, temp);
             }
+
+            else if (temp->quantumRemaining == 0) {
+                s->context_switch++;                //(For preemtive scheduling only) increment total CS by 1, since we are preemptively switching out a process based on exceeding the time quantum
+                enqueueProcess(tempReady, temp);    //Still in CPU burst, not blocked by I/O, switched off due to exceeding time quantum, keep in ready queue
+                node = node->next;
+                removeProcess(execute, temp);       //Remove from the execution queue
+            }
+
             else node = node->next;
         }
 
@@ -291,7 +304,8 @@ int main(int argc, char* argv[]) {
                     node = tempReady->front;
                     for (int j = 0; j < tempReady->size; j++) {
                         if (node->data->pid == tempArr[i].pid) {
-                            enqueueProcess(readyQ, node->data);   //Place in ready queue
+                            node->data->quantumRemaining = quantum; //Reset the quantum
+                            enqueueProcess(readyQ, node->data);     //Place in ready queue
                             break;
                         }
                         else node = node->next;
