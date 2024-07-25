@@ -38,7 +38,7 @@ In terms of queues and arrays, we have several.
 - Temporary Array
 - Finish Array (AKA Terminated)
 
-![Process State Diagram, from Operating System Concepts, 10th Edition](https://github.com/[luckman21]/[EECS-3221E-SU-2024]/blob/[main]/README_resources/CPU_scheduling_diagram.png?raw=true)
+![Process State Diagram, from Operating System Concepts, 10th Edition](README_resources/CPU_scheduling_diagram.png)
 
 The first is an array of all the processes, which we use to track when a process arrives.  This array is ordered by arrival time (lowest to highest) and can be considered the "new" queue.  We also have another array that tracks the order of processes that finish, by adding them to the array upon completing all of their bursts.  These processes are removed from circulation.
 
@@ -67,7 +67,7 @@ Due to the complexity of designing a simulated CPU and scheduling algorithms, th
 In the first part of the assignment project, we were tasked with designing a CPU simulation with the FCFS (First-Come First-Served) scheduling
 algorithm.  Using FCFS, we schedule processes in order of arrival.  The processes that arrive first get serviced first.  If two processes arrive at the same time, the process with the lower PID (Process ID) comes first.  This scheduling is non-preemptive, meaning we do not switch out the process intentionally until it is interrupted by I/O (finishing it's current CPU burst).
 
-![Non-preemptive scheduling, FCFS flowchart](https://github.com/[luckman21]/[EECS-3221E-SU-2024]/blob/[main]/README_resources/FCFS_scheduling_diagram.png?raw=true)
+![Non-preemptive scheduling, FCFS flowchart](README_resources/FCFS_scheduling_diagram.png)
 
 ### Assignment Project Part 2
 
@@ -79,7 +79,7 @@ The time quantum of RR can vary depending on what the developer specifies, and t
 
 For this assignment, we were asked to use 3 different time quantums for RR: 3, 10 and 45.  The quantum was specified in the args when running the program (./rr quantum < CPULoad.dat).
 
-![Addition of the interrupt transition, due to preemptive scheduling of RR](https://github.com/[luckman21]/[EECS-3221E-SU-2024]/blob/[main]/README_resources/RR_scheduling_diagram.png?raw=true)
+![Addition of the interrupt transition, due to preemptive scheduling of RR](README_resources/RR_scheduling_diagram.png)
 
 FBQ is an implementation of a multi-level feedback queue.  What makes this scheduling algorithm unique are the multiple queues implemented, each with their own scheduling algorithm.  Multi-level feedback queues have the following parameters:
 - Multiple queues / tiers
