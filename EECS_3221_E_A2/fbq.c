@@ -9,7 +9,7 @@ YorkU email address: luq21@my.yorku.ca
 #define MAX_CPUS 4      //Number of simulated CPUs = 4
 #define QUEUE_LEVELS 3  //Number of queue levels in the FBQ (RR1, RR2, FCFS)
 
-#include "sch-helpers.c"    //Change to h on Linux, c on Windows
+#include "sch-helpers.h"    //Change to h on Linux, c on Windows
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -35,7 +35,10 @@ process_queue *readyQ1;                 //Second RR Ready Queue
 process_queue *readyQ2;                 //FCFS Ready Queue
 process_queue *waitQ;                   //Waiting queue
 process_queue *execute;                 //Processes currently under execution (max of 4)
-process_queue *tempReady;               //Stores an unsorted queue of processes that needs to be sorted before joining the ready queue
+process_queue **tempReady;              //A pointer that points to an unsorted queue of processes that needs to be sorted before joining the ready queue
+process_queue *tempReady0;              //Stores an unsorted queue of processes that go directly into the top queue
+process_queue *tempReady1;              //Stores an unsorted queue of processes that go directly into middle queue
+process_queue *tempReady2;              //Stores an unsorted queue of processes that go directly into the FCFS queue
 process_node *node;                     //Used as a node to iterate through queues
 process *temp;                          //Represents a process temporarily for execution purposes
 int numberOfProcesses = -1;             //Total number of processes
@@ -155,8 +158,10 @@ int main(int argc, char* argv[]) {
     s->cpu_util = 0;
     s->context_switch = 0; 
 
-    quantums[0] = strtol(argv[1], &q_pointers[0], 10); //Assigns the quantum based on the specified input.  strtol converts char array pointer to int, in specified base 10
-    quantums[1] = strtol(argv[2], &q_pointers[1], 10);
+    quantums[0] = 8;
+    quantums[1] = 20;
+    //quantums[0] = strtol(argv[1], &q_pointers[0], 10); //Assigns the quantum based on the specified input.  strtol converts char array pointer to int, in specified base 10
+    //quantums[1] = strtol(argv[2], &q_pointers[1], 10);
     quantums[2] = -1;   //To denote FCFS
 
     int info = 1;   //Stores the return value from readProcess to determine if there is still more input to be parsed
@@ -184,15 +189,21 @@ int main(int argc, char* argv[]) {
     waitQ = malloc(sizeof(process_queue));
     execute = malloc(sizeof(process_queue));
     tempReady = malloc(sizeof(process_queue));
+    tempReady0 = malloc(sizeof(process_queue));
+    tempReady1 = malloc(sizeof(process_queue));
+    tempReady2 = malloc(sizeof(process_queue));
     node = malloc(sizeof(process_node));
     temp = malloc(sizeof(process));
 
+    //Initialize process queues
     initializeProcessQueue(readyQ0);
     initializeProcessQueue(readyQ1);
     initializeProcessQueue(readyQ2);
     initializeProcessQueue(waitQ);
     initializeProcessQueue(execute);
-    initializeProcessQueue(tempReady);
+    initializeProcessQueue(tempReady0);
+    initializeProcessQueue(tempReady1);
+    initializeProcessQueue(tempReady2);
 
     index = 0;  //Index pointing to the next process to arrive
 
@@ -247,7 +258,10 @@ int main(int argc, char* argv[]) {
                     if (temp->bursts[temp->currentBurst].length == 0) {
                         temp->currentBurst++;
                         
-                        enqueueProcess(tempReady, temp);  //No I/O burst, not blocked, so place in temp ready queue for sorting before placing in ready queue
+                        //No I/O burst, not blocked, so place in temp ready queue for sorting before placing in ready queue
+                        if (temp->currentQueue == 0) enqueueProcess(tempReady0, temp);
+                        else if (temp->currentQueue == 1) enqueueProcess(tempReady1, temp);
+                        else enqueueProcess(tempReady2, temp);
                     }
                     else enqueueProcess(waitQ, temp);   //I/O burst, so place in wait queue
                 }
@@ -267,7 +281,11 @@ int main(int argc, char* argv[]) {
             else if (temp->quantumRemaining == 0) {
                 if (temp->currentQueue < 2) temp->currentQueue++;   //Demote a process to the next queue level
                 s->context_switch++;                                //(For preemtive scheduling only) increment total CS by 1, since we are preemptively switching out a process based on exceeding the time quantum
-                enqueueProcess(tempReady, temp);                    //Still in CPU burst, not blocked by I/O, switched off due to exceeding time quantum, keep in ready queue
+
+                //Still in CPU burst, not blocked by I/O, switched off due to exceeding time quantum, keep in ready queue
+                if (temp->currentQueue == 1) enqueueProcess(tempReady1, temp);
+                else enqueueProcess(tempReady2, temp);
+                
                 node = node->next;
                 removeProcess(execute, temp);                       //Remove from the execution queue
             }
@@ -292,7 +310,10 @@ int main(int argc, char* argv[]) {
                     if (temp->bursts[temp->currentBurst].length == 0) {
                         temp->currentBurst++;   //No CPU burst, blocked, so keep in wait queue
                     }
-                    else enqueueProcess(tempReady, temp);    //Enqueue in the temp ready queue to be sorted before being queued into the ready queue
+                    else {
+                        temp->currentQueue = 0;             //Promote process to queue 0 for completing it's I/O burst
+                        enqueueProcess(tempReady0, temp);    //Enqueue in the temp ready0 queue to be sorted before being queued into the top ready queue
+                    }
                 }
 
                 //The process has completed it's final burst (I/O)
@@ -308,33 +329,50 @@ int main(int argc, char* argv[]) {
             else node = node->next;
         }
 
-        if (tempReady->size > 0) {
+        for (int i = 0; i < QUEUE_LEVELS; i++) {
 
-            if (tempReady->size > 1) {
+            //Set the pointer to point to the correct pair of queues
+            if (i == 0) {
+                tempReady = &tempReady0; 
+                readyQ = &readyQ0;
+            }
+            else if (i == 1) {
+                tempReady = &tempReady1;
+                readyQ = &readyQ1;
+            }
+            else {
+                tempReady = &tempReady2;
+                readyQ = &readyQ2;
+            }
 
-                node = tempReady->front;
-                for (int i = 0; i < tempReady->size; i++) {
-                    tempArr[i] = *node->data;
-                    node = node->next;
-                }
+            if ((*tempReady)->size > 0) {
 
-                qsort(tempArr, tempReady->size, sizeof(process), compareByPID);   //Sort in order of PID (since they all arrive on the same clock cycle)
+                if ((*tempReady)->size > 1) {
 
-                for (int i = 0; i < tempReady->size; i++) {
+                    node = (*tempReady)->front;
+                    for (int i = 0; i < (*tempReady)->size; i++) {
+                        tempArr[i] = *node->data;
+                        node = node->next;
+                    }
 
-                    node = tempReady->front;
-                    for (int j = 0; j < tempReady->size; j++) {
-                        if (node->data->pid == tempArr[i].pid) {
-                            node->data->quantumRemaining = quantums[node->data->currentQueue]; //Reset the quantum
-                            enqueueProcess((*readyQ), node->data);     //Place in ready queue
-                            break;
+                    qsort(tempArr, (*tempReady)->size, sizeof(process), compareByPID);   //Sort in order of PID (since they all arrive on the same clock cycle)
+
+                    for (int i = 0; i < (*tempReady)->size; i++) {
+
+                        node = (*tempReady)->front;
+                        for (int j = 0; j < (*tempReady)->size; j++) {
+                            if (node->data->pid == tempArr[i].pid) {
+                                node->data->quantumRemaining = quantums[node->data->currentQueue]; //Reset the quantum
+                                enqueueProcess((*readyQ), node->data);     //Place in ready queue
+                                break;
+                            }
+                            else node = node->next;
                         }
-                        else node = node->next;
                     }
                 }
+                else enqueueProcess((*readyQ), (*tempReady)->front->data);
+                while ((*tempReady)->size > 0) dequeueProcess((*tempReady));
             }
-            else enqueueProcess((*readyQ), tempReady->front->data);
-            while (tempReady->size > 0) dequeueProcess(tempReady);
         }
         clk++;
     }
@@ -368,13 +406,14 @@ int main(int argc, char* argv[]) {
     printf("\n");
 
     //Free dynamically allocated memory from the heap to prevent a memory leak
-    free(readyQ);
     free(readyQ0);
     free(readyQ1);
     free(readyQ2);
     free(waitQ);
     free(execute);
-    free(tempReady);
+    free(tempReady0);
+    free(tempReady1);
+    free(tempReady2);
     free(node);
     return 0;
 }
