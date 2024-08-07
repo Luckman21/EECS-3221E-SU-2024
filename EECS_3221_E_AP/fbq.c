@@ -177,10 +177,10 @@ int main(int argc, char *argv[])
     s->cpu_util = 0;
     s->context_switch = 0;
 
-    quantums[0] = 8;
-    quantums[1] = 20;
-    // quantums[0] = strtol(argv[1], &q_pointers[0], 10); //Assigns the quantum based on the specified input.  strtol converts char array pointer to int, in specified base 10
-    // quantums[1] = strtol(argv[2], &q_pointers[1], 10);
+    //quantums[0] = 8;
+    //quantums[1] = 20;
+    quantums[0] = strtol(argv[1], &q_pointers[0], 10); //Assigns the quantum based on the specified input.  strtol converts char array pointer to int, in specified base 10
+    quantums[1] = strtol(argv[2], &q_pointers[1], 10);
     quantums[2] = -1; // To denote FCFS
 
     int info = 1;  // Stores the return value from readProcess to determine if there is still more input to be parsed
