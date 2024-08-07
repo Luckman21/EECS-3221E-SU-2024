@@ -25,18 +25,15 @@ typedef struct buffer_item {
     off_t offset;   //The offset of this byte of data from the first byte in the source file
 } BufferItem;
 
-typedef struct thread_info {
-    int tid;    //Thread ID of the thread
-    FILE *file; //Path to the file (consumers store the copy file path, producers store the dataset file path)
-} T_Info;
-
-int dataset, copy, logfile;     //Create pointers for the dataset, copy and log files
+int dataset, copy;              //Create pointers for the dataset, copy and log files
+FILE *logfile;
 BufferItem *buffer;             //Ring Buffer
 int in, out, buf_size;          //Number of producer (IN), consumer (out) threads to make and buffer size
 int i_read = 0, i_write = 0;    //Integers to point to the current index of read and write
 pthread_mutex_t lock, w_lock;   //Read and Write mutex locks
 sem_t emp, full;                //Semaphores to indicate free space in the ring buffer (emp = empty, full)
 char *arg_pointers[3];          //An array of char pointers used for strtol to convert the arg parameter from char array pointer to int
+int terminate = 0;              //An int counter to count the number of in threads that have terminated.  Once terminate = in, terminate all out threads.
 
 //List all function headers at the top to remove implicit function definitions
 void *producer(void *param);
@@ -47,7 +44,7 @@ void consume(int tid, BufferItem *item);
 void read_byte(int tid, BufferItem *item);
 void write_byte(int tid, BufferItem *item);
 void sem_wait_full_count();
-void nanofail();
+void nanos();
 
 /**
  * @brief A function to modularize logfile updates.  Pass specific values to the function to determine the output of the transaction.
@@ -60,7 +57,19 @@ void nanofail();
  */
 void transaction(int op, int t_type, int n, BufferItem *item, int index) {
     int b; //<b> the actual byte represented as an integer value (0-255)
-    //fprintf(log, "%s %cT%d O%d B%d I%d");
+
+    char operation[20];
+    char type;
+
+    if (op == 0)      strcpy(operation,  "read_byte");
+    else if (op == 1) strcpy(operation, "write_byte");
+    else if (op == 2) strcpy(operation,    "produce");
+    else if (op == 3) strcpy(operation,    "consume");
+
+    if      (t_type == 0) type = 'P';
+    else if (t_type == 1) type = 'C';
+    
+    fprintf(logfile, "%s %cT%d O%d B%d I%d\n", operation, type, n, item->offset, item->data, index);
 }
 
 void produce(int tid, BufferItem *item) {
@@ -146,11 +155,18 @@ void sem_wait_full_count() {
 /**
  * @brief A function to modularize error handling for nanosleep. Prints out an error message and exits with status 1 when called.
  */
-void nanofail() {
-    printf("\n --------------------------------------");
+void nanos() {
+
+    struct timespec timed = {0, 0};
+    timed.tv_sec = 0;
+    timed.tv_nsec = rand() % TEN_MILLIS_IN_NANOS;
+
+    if (nanosleep(&timed, NULL) < 0) {
+        printf("\n --------------------------------------");
         printf("ERROR: Nanosleep failed to sleep for set time.  Terminating");
         printf("\n --------------------------------------");
-        exit(1);
+        exit(1);    //Exit with error status 1
+    }
 }
 
 
@@ -168,15 +184,29 @@ void nanofail() {
 int main (int argc, char *argv[]) {
 
     //Initialize data
+    in = 1;
+    out = 1;
+    buf_size = 10;
+
+    dataset = open("dataset4.txt", O_CREAT);
+    copy = open("dset.txt", O_CREAT);
+
+    dataset = open("dataset4.txt", O_RDONLY);
+    copy = open("dset.txt", O_WRONLY);
+    logfile = fopen("logfile.txt", "w");
 
     //The number of IN and OUT threads to create
-    in =  strtol(argv[1], &arg_pointers[0], 10);
-    out = strtol(argv[2], &arg_pointers[1], 10);
+    //in =  strtol(argv[1], &arg_pointers[0], 10);
+    //out = strtol(argv[2], &arg_pointers[1], 10);
 
     pthread_t readers[in];
     pthread_t writers[out];
 
-    buf_size = strtol(argv[5], &arg_pointers[2], 10); //Assign a value for buf_size
+    //Create arrays for thread IDs
+    int tid_in[in];
+    int tid_out[out];
+
+    //buf_size = strtol(argv[5], &arg_pointers[2], 10); //Assign a value for buf_size
 
     //Error check to ensure the parameters are legal
     if (in < 1 || out < 1 || buf_size < 1) {
@@ -186,25 +216,54 @@ int main (int argc, char *argv[]) {
         else if (buf_size < 1) printf("ERROR: Size of buffer must be at least 1, currently %d specified.  Terminating", buf_size);
         else printf("ERROR: Parameter size is not legal.  Terminating");
         printf("\n --------------------------------------\n");
-        exit(1);
+        exit(1);    //Exit with error status 1
     }
     
-    //Open source, copy and log files
+    //Create and open source, copy and log files
+    /**
+    dataset = open(argv[3], O_CREAT);
+    copy = open(argv[4], O_CREAT);
+    
     dataset = open(argv[3], O_RDONLY);
     copy = open(argv[4], O_WRONLY);
-    logfile = open(argv[6], O_WRONLY);
+    logfile = fopen(argv[6], "w");
+    */
 
     //Create circular buffer
     buffer = malloc(buf_size * sizeof(BufferItem));
 
+    //Initialize mutex lock and semaphores
+    if (pthread_mutex_init(&lock, NULL) != 0) {
+        printf("\n --------------------------------------\n");
+        printf("ERROR: Mutex lock initialization failed.  Terminating");
+        printf("\n --------------------------------------\n");
+        exit(1);    //Exit with error status 1
+    }
+
+    sem_init(&emp, 0, buf_size);
+    sem_init(&full, 0, 0);
+
     //Create IN and OUT threads
-    for (int i = 0; i < in; i++)  pthread_create(&writers[i], NULL, producer, &i);
-    for (int i = 0; i < out; i++) pthread_create(&readers[i], NULL, consumer, &i);
+    for (int i = 0; i < in; i++)  {
+        tid_in[i] = i;
+        pthread_create(&writers[i], NULL, producer, &tid_in[i]);
+    }
+    for (int i = 0; i < out; i++) {
+        tid_out[i] = i;
+        pthread_create(&readers[i], NULL, consumer, &tid_out[i]);
+    }
+
+    sleep(3);
+
+    //Destroy the mutex lock and semaphores
+    pthread_mutex_destroy(&lock);
+    sem_destroy(&emp);
+    sem_destroy(&full);
 
     //Close source, copy and log files
     close(dataset);
     close(copy);
-    close(logfile);
+    fclose(logfile);
 
     //free dynamically allocated memory
     free(buffer);
@@ -221,16 +280,18 @@ int main (int argc, char *argv[]) {
 void *producer(void *param) {
 
     int *tid = param;   //Set the thread ID of the current thread to the index passed to the thread
-    BufferItem *data = malloc(sizeof(BufferItem));
+    BufferItem *p_data = malloc(sizeof(BufferItem));
+    p_data->offset = 0;
 
     while (1 == 1) {
-        //if (nanosleep(rand(2)) != 0){}
-        read_byte(*tid, data);
-        //nsleep();
-        produce(*tid, data);
+        nanos();
+        read_byte(*tid, p_data);
+        nanos();
+        produce(*tid, p_data);
     }
 
     //Close the thread when EOF is reached
+    terminate++;
 
     return NULL;    //Returning implicitly closes the thread
 }
@@ -243,13 +304,14 @@ void *producer(void *param) {
 void *consumer(void *param) {
 
     int *tid = param;   //Set the thread ID of the current thread to the index passed to the thread
-    BufferItem *data = malloc(sizeof(BufferItem));
+    BufferItem *c_data = malloc(sizeof(BufferItem));
+    c_data->offset = 0;
 
-    while (1 == 1) {
-        //nsleep();
-        consume(*tid, data);
-        //nsleep();
-        write_byte(*tid, data);
+    while (terminate < in) {
+        nanos();
+        consume(*tid, c_data);
+        nanos();
+        write_byte(*tid, c_data);
     }
 
     return NULL;    //Returning implicitly closes the thread
