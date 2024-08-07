@@ -120,6 +120,7 @@ void read_byte(int tid, BufferItem *item) {
     if (read(dataset, &(item->data), 1) < 1) {
         printf("read_byte PT%d EOF pthread_exit(0)\n", tid);
         pthread_mutex_unlock(&lock);  //Release mutex lock due to EOF
+        terminate++;
         pthread_exit(0);    //Close thread since EOF reached
     }
 
@@ -281,7 +282,6 @@ void *producer(void *param) {
 
     int *tid = param;   //Set the thread ID of the current thread to the index passed to the thread
     BufferItem *p_data = malloc(sizeof(BufferItem));
-    p_data->offset = 0;
 
     while (1 == 1) {
         nanos();
@@ -289,9 +289,6 @@ void *producer(void *param) {
         nanos();
         produce(*tid, p_data);
     }
-
-    //Close the thread when EOF is reached
-    terminate++;
 
     return NULL;    //Returning implicitly closes the thread
 }
@@ -305,7 +302,6 @@ void *consumer(void *param) {
 
     int *tid = param;   //Set the thread ID of the current thread to the index passed to the thread
     BufferItem *c_data = malloc(sizeof(BufferItem));
-    c_data->offset = 0;
 
     while (terminate < in) {
         nanos();
@@ -314,5 +310,6 @@ void *consumer(void *param) {
         write_byte(*tid, c_data);
     }
 
+    printf("CT%d all PTs terminated return NULL\n", *tid);
     return NULL;    //Returning implicitly closes the thread
 }
