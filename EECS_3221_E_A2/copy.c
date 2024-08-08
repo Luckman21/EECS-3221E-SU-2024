@@ -223,7 +223,7 @@ int main (int argc, char *argv[]) {
     int tid_in[in];
     int tid_out[out];
 
-    //buf_size = strtol(argv[5], &arg_pointers[2], 10); //Assign a value for buf_size
+    buf_size = strtol(argv[5], &arg_pointers[2], 10); //Assign a value for buf_size
 
     //Error check to ensure the parameters are legal
     if (in < 1 || out < 1 || buf_size < 1) {
