@@ -267,7 +267,7 @@ int main (int argc, char *argv[]) {
         pthread_create(&readers[i], NULL, consumer, &tid_out[i]);
     }
 
-    while (terminate < (in + out) && sem_wait_full < out) sleep(1);
+    while (terminate < (in + out) && sem_wait_full < out) {}    //Loop until all threads terminate (Advanced Solution)
 
     //Destroy the mutex lock and semaphores
     pthread_mutex_destroy(&lock);
