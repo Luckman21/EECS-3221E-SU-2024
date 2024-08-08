@@ -37,7 +37,6 @@ sem_t emp, full;                //Semaphores to indicate free space in the ring 
 char *arg_pointers[3];          //An array of char pointers used for strtol to convert the arg parameter from char array pointer to int
 int terminate = 0;              //An int counter to count the number of in threads that have terminated.  
 int sem_wait_full = 0;          //An int counter to represent a semaphore of CTs waiting on a full signal.  Once sem_wait = out, terminate all out threads.
-int off = 0;                    //Integer to track the current offset
 
 //List all function headers at the top to remove implicit function definitions
 void *producer(void *param);
@@ -83,7 +82,6 @@ void transaction(int op, int t_type, int n, BufferItem *item, int index) {
 void produce(int tid, BufferItem *item) {
     
     sem_wait(&emp); //Wait until empty semaphore is acquired
-
     pthread_mutex_lock(&lock);  //Wait until lock is acquired before entering the critical section
 
     //Add item to the buffer
@@ -104,9 +102,15 @@ void produce(int tid, BufferItem *item) {
  */
 void consume(int tid, BufferItem *item) {
 
-    sem_wait_full++;
-    sem_wait(&full); //Wait until full semaphore is acquired
-    sem_wait_full--;
+    sem_wait_full++;    //An implementation of sem_get_value to count the number of threads waiting on a semaphore
+    while (sem_trywait(&full) < 0) {  //Wait until full semaphore is acquired
+        if (terminate >= in) {
+            printf("consume CT%d all PTs terminated, pthread_exit(0)\n", tid);
+            terminate++;
+            pthread_exit(0);
+        }
+    }
+    sem_wait_full--;    //Decrement the number of threads waiting by 1 since the thread is not waiting anymore
 
     pthread_mutex_lock(&lock);  //Wait until lock is acquired before entering the critical section
 
@@ -134,7 +138,7 @@ void read_byte(int tid, BufferItem *item) {
     if ((item->offset = lseek(dataset, 0, SEEK_CUR)) < 0) {
         pthread_mutex_unlock(&lock);   //Release mutex lock due to error
         printf("Cannot seek output file.  Terminating\n");
-        exit(1);
+        exit(1);    //Exit with error status 1
     }
 
     //Try reading the byte
@@ -160,13 +164,11 @@ void write_byte(int tid, BufferItem *item) {
     pthread_mutex_lock(&lock);    //Acquire write lock to enter critical section
     
     //Try setting the current file offset
-    if (lseek(copy, off, SEEK_SET) < 0) {
+    if (lseek(copy, item->offset, SEEK_SET) < 0) {
         pthread_mutex_unlock(&lock);   //Release mutex lock due to error
         printf("Cannot seek output file.  Terminating\n");
         exit(1);    //Exit with error status 1
     }
-
-    off++;  //Increment the global offset for writing
 
     //Try to write the byte
     if (write(copy, &(item->data), 1) < 1) {
@@ -223,7 +225,7 @@ int main (int argc, char *argv[]) {
     int tid_in[in];
     int tid_out[out];
 
-    //buf_size = strtol(argv[5], &arg_pointers[2], 10); //Assign a value for buf_size
+    buf_size = strtol(argv[5], &arg_pointers[2], 10); //Assign a value for buf_size
 
     //Error check to ensure the parameters are legal
     if (in < 1 || out < 1 || buf_size < 1) {
@@ -237,11 +239,8 @@ int main (int argc, char *argv[]) {
     }
     
     //Create and open source, copy and log files
-    dataset = open(argv[3], O_CREAT);
-    copy = open(argv[4], O_CREAT);
-    
     dataset = open(argv[3], O_RDONLY);
-    copy = open(argv[4], O_WRONLY);
+    copy = open(argv[4], O_WRONLY | O_CREAT | O_TRUNC, 0666);
     logfile = fopen(argv[6], "w");
 
     //Create circular buffer
@@ -268,7 +267,7 @@ int main (int argc, char *argv[]) {
         pthread_create(&readers[i], NULL, consumer, &tid_out[i]);
     }
 
-    while (terminate < in && sem_wait_full < out) sleep(1);
+    while (terminate < (in + out) && sem_wait_full < out) sleep(1);
 
     //Destroy the mutex lock and semaphores
     pthread_mutex_destroy(&lock);
@@ -318,13 +317,12 @@ void *consumer(void *param) {
     BufferItem *c_data = malloc(sizeof(BufferItem));
 
     while (1 == 1) {
-        c_data->offset = off;
         nanos();
         consume(*tid, c_data);
         nanos();
         write_byte(*tid, c_data);
     }
-
+    terminate++;
     printf("CT%d all PTs terminated return NULL\n", *tid);
     return NULL;    //Returning implicitly closes the thread
 }
