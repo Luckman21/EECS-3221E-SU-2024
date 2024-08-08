@@ -11,6 +11,7 @@ YorkU email address: luq21@my.yorku.ca
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 #include <pthread.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -58,7 +59,6 @@ void nanos();
  * @param index <i> Either -1 if read_byte or write_byte, otherwise index in the buffer for produce / consume operations
  */
 void transaction(int op, int t_type, int n, BufferItem *item, int index) {
-    int b; //<b> the actual byte represented as an integer value (0-255)
 
     char operation[20];
     char type;
@@ -131,7 +131,7 @@ void read_byte(int tid, BufferItem *item) {
     pthread_mutex_lock(&lock);    //Acquire read lock to enter critical section
 
     //Try acquiring the current offset
-    if (item->offset = lseek(dataset, 0, SEEK_CUR) < 0) {
+    if ((item->offset = lseek(dataset, 0, SEEK_CUR)) < 0) {
         pthread_mutex_unlock(&lock);   //Release mutex lock due to error
         printf("Cannot seek output file.  Terminating\n");
         exit(1);
@@ -175,8 +175,6 @@ void write_byte(int tid, BufferItem *item) {
         exit(1);    //Exit with error status 1
     }
 
-    printf("%c", item->data);
-
     transaction(1, 1, tid, item, -1);   //Log the current transaction
     pthread_mutex_unlock(&lock);  //Release write lock upon completion of critical section
 }
@@ -213,20 +211,10 @@ void nanos() {
 int main (int argc, char *argv[]) {
 
     //Initialize data
-    in = 1;
-    out = 1;
-    buf_size = 10;
-
-    dataset = open("dataset4.txt", O_CREAT);
-    copy = open("dset.txt", O_CREAT);
-
-    dataset = open("dataset4.txt", O_RDONLY);
-    copy = open("dset.txt", O_WRONLY);
-    logfile = fopen("logfile.txt", "w");
 
     //The number of IN and OUT threads to create
-    //in =  strtol(argv[1], &arg_pointers[0], 10);
-    //out = strtol(argv[2], &arg_pointers[1], 10);
+    in =  strtol(argv[1], &arg_pointers[0], 10);
+    out = strtol(argv[2], &arg_pointers[1], 10);
 
     pthread_t readers[in];
     pthread_t writers[out];
@@ -249,14 +237,12 @@ int main (int argc, char *argv[]) {
     }
     
     //Create and open source, copy and log files
-    /**
     dataset = open(argv[3], O_CREAT);
     copy = open(argv[4], O_CREAT);
     
     dataset = open(argv[3], O_RDONLY);
     copy = open(argv[4], O_WRONLY);
     logfile = fopen(argv[6], "w");
-    */
 
     //Create circular buffer
     buffer = malloc(buf_size * sizeof(BufferItem));
@@ -282,7 +268,7 @@ int main (int argc, char *argv[]) {
         pthread_create(&readers[i], NULL, consumer, &tid_out[i]);
     }
 
-    sleep(3);
+    while (terminate < in && sem_wait_full < out) sleep(1);
 
     //Destroy the mutex lock and semaphores
     pthread_mutex_destroy(&lock);
@@ -331,7 +317,8 @@ void *consumer(void *param) {
     int *tid = param;   //Set the thread ID of the current thread to the index passed to the thread
     BufferItem *c_data = malloc(sizeof(BufferItem));
 
-    while (sem_wait_full < out && terminate < in) {
+    while (1 == 1) {
+        c_data->offset = off;
         nanos();
         consume(*tid, c_data);
         nanos();
