@@ -9,6 +9,7 @@ YorkU email address: luq21@my.yorku.ca
 #define TEN_MILLIS_IN_NANOS 100000000
 
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <pthread.h>
 #include <unistd.h>
@@ -33,7 +34,9 @@ int i_read = 0, i_write = 0;    //Integers to point to the current index of read
 pthread_mutex_t lock, w_lock;   //Read and Write mutex locks
 sem_t emp, full;                //Semaphores to indicate free space in the ring buffer (emp = empty, full)
 char *arg_pointers[3];          //An array of char pointers used for strtol to convert the arg parameter from char array pointer to int
-int terminate = 0;              //An int counter to count the number of in threads that have terminated.  Once terminate = in, terminate all out threads.
+int terminate = 0;              //An int counter to count the number of in threads that have terminated.  
+int sem_wait_full = 0;          //An int counter to represent a semaphore of CTs waiting on a full signal.  Once sem_wait = out, terminate all out threads.
+int off = 0;                    //Integer to track the current offset
 
 //List all function headers at the top to remove implicit function definitions
 void *producer(void *param);
@@ -43,7 +46,6 @@ void produce(int tid, BufferItem *item);
 void consume(int tid, BufferItem *item);
 void read_byte(int tid, BufferItem *item);
 void write_byte(int tid, BufferItem *item);
-void sem_wait_full_count();
 void nanos();
 
 /**
@@ -69,9 +71,15 @@ void transaction(int op, int t_type, int n, BufferItem *item, int index) {
     if      (t_type == 0) type = 'P';
     else if (t_type == 1) type = 'C';
     
-    fprintf(logfile, "%s %cT%d O%d B%d I%d\n", operation, type, n, item->offset, item->data, index);
+    fprintf(logfile, "%s %cT%d O%jd B%d I%d\n", operation, type, n, (intmax_t)(item->offset), item->data, index);
 }
 
+/**
+ * @brief A function that manages producing data in the global circular ring buffer.  The index at which data is produced is determined by the current write index, i_write
+ * 
+ * @param tid Thread ID of the thread invoking the function
+ * @param item A local buffer of the thread to store data that is to be written to the circular buffer
+ */
 void produce(int tid, BufferItem *item) {
     
     sem_wait(&emp); //Wait until empty semaphore is acquired
@@ -88,10 +96,17 @@ void produce(int tid, BufferItem *item) {
     sem_post(&full);
 }
 
+/**
+ * @brief A function that manages consuming data from the global circular ring buffer.  The data consumed is determined by the global read index, i_read
+ * 
+ * @param tid Thread ID of the thread invoking the function
+ * @param item A local buffer of the thread to copy the data from an index of the ring buffer
+ */
 void consume(int tid, BufferItem *item) {
 
+    sem_wait_full++;
     sem_wait(&full); //Wait until full semaphore is acquired
-    //sem_wait_full_count();
+    sem_wait_full--;
 
     pthread_mutex_lock(&lock);  //Wait until lock is acquired before entering the critical section
 
@@ -105,6 +120,12 @@ void consume(int tid, BufferItem *item) {
     sem_post(&emp);
 }
 
+/**
+ * @brief A function that sets the cursor to the current read index in the file, and copies the value to a local buffer.
+ * 
+ * @param tid Thread ID of the thread invoking the function
+ * @param item A BufferItem struct element, containing memory to store the read byte data and the current offset the byte is located at
+ */
 void read_byte(int tid, BufferItem *item) {
 
     pthread_mutex_lock(&lock);    //Acquire read lock to enter critical section
@@ -128,16 +149,24 @@ void read_byte(int tid, BufferItem *item) {
     pthread_mutex_unlock(&lock);  //Release read lock upon completion of critical section
 }
 
+/**
+ * @brief A function that sets the cursor position to write to the output file.  It writes the data stored in it's buffer to the output file at the specified offset.
+ * 
+ * @param tid Thread ID of the thread invoking the function
+ * @param item A BufferItem struct element, containing the offset the data should be placed at, and the data in byte value to write at that position
+ */
 void write_byte(int tid, BufferItem *item) {
 
     pthread_mutex_lock(&lock);    //Acquire write lock to enter critical section
-
+    
     //Try setting the current file offset
-    if (lseek(copy, item->offset, SEEK_SET) < 0) {
+    if (lseek(copy, off, SEEK_SET) < 0) {
         pthread_mutex_unlock(&lock);   //Release mutex lock due to error
         printf("Cannot seek output file.  Terminating\n");
         exit(1);    //Exit with error status 1
     }
+
+    off++;  //Increment the global offset for writing
 
     //Try to write the byte
     if (write(copy, &(item->data), 1) < 1) {
@@ -146,15 +175,14 @@ void write_byte(int tid, BufferItem *item) {
         exit(1);    //Exit with error status 1
     }
 
+    printf("%c", item->data);
+
     transaction(1, 1, tid, item, -1);   //Log the current transaction
     pthread_mutex_unlock(&lock);  //Release write lock upon completion of critical section
 }
 
-void sem_wait_full_count() {
-}
-
 /**
- * @brief A function to modularize error handling for nanosleep. Prints out an error message and exits with status 1 when called.
+ * @brief A function to modularize random time and error handling for nanosleep. Prints out an error message and exits with status 1 if failed to sleep for the set time.
  */
 void nanos() {
 
@@ -303,7 +331,7 @@ void *consumer(void *param) {
     int *tid = param;   //Set the thread ID of the current thread to the index passed to the thread
     BufferItem *c_data = malloc(sizeof(BufferItem));
 
-    while (terminate < in) {
+    while (sem_wait_full < out && terminate < in) {
         nanos();
         consume(*tid, c_data);
         nanos();
