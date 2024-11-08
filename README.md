@@ -1,5 +1,5 @@
 # EECS-3221E-SU-2024
- A repository of my assignments for EECS 3221E during the SU 2024 semester.
+ A repository of my assignments for Operating Systems (OS) EECS 3221E during the SU 2024 semester.  This course focuses on Linux OS, while also touching on other OSes like Windows, MacOS, Android, iOS and Solaris.
 
 ## Assignment 1
 
